@@ -13,7 +13,6 @@
 @Desc    : 
     
 """
-import traceback
 from functools import partial
 
 import pywasm
@@ -106,7 +105,7 @@ class WasmEasy:
                 'Infinity': None,
             }
         })
-        pass
+        # pywasm.on_debug()
 
     def wasm_call(self, name, args):
         return self.runtime.exec(name, args)
