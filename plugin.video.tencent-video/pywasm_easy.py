@@ -51,6 +51,10 @@ def pywasm_path():
     pywasm.Memory = pywasm.execution.MemoryInstance
 
 
+if pywasm.execution.match_limits != match_limits:
+    pywasm_path()
+
+
 class WasmMemory:
     def __new__(cls, n, m=None):
         limits = pywasm.Limits()
@@ -82,18 +86,14 @@ class WasmEnv(dict):
     def __getitem__(self, item):
         if super().__contains__(item):
             return super().__getitem__(item)
-        elif 'cb_' + item in self.wasm.__dir__():
-            func = self.wasm.__getattribute__('cb_' + item).__func__
-            partial_func = partial(func, self.wasm, _cb_name=item)
-            partial_func.__name__ = item
-            return partial_func
         else:
-            partial_func = partial(self.callback, _cb_name=item)
+            if 'cb_' + item in self.wasm.__dir__():
+                func = self.wasm.__getattribute__('cb_' + item).__func__
+                partial_func = partial(func, self.wasm, _cb_name=item)
+            else:
+                partial_func = partial(self.wasm.callback, self.wasm, _cb_name=item)
             partial_func.__name__ = item
             return partial_func
-
-    def callback(self, *args, **kwargs):
-        return 0
 
 
 class WasmEasy:
@@ -115,6 +115,10 @@ class WasmEasy:
 
     def stack_alloc(self, size):
         pass
+
+    def callback(self, *args, **kwargs):
+        assert self
+        return 0
 
     @classmethod
     def wasm_function(cls, paras, ret):
