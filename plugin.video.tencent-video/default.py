@@ -18,7 +18,7 @@ import json
 from tx_player import TxPlayer
 
 if __name__ == '__main__':
-    tx_player = TxPlayer('https://v.qq.com/x/cover/zu9dcrznlprx505/d0973687czo.html')
+    tx_player = TxPlayer('https://v.qq.com/x/cover/mzc00200dft9s08.html')
     ret_data = tx_player.get_video_info()
     data_json = ret_data.json()
     vinfo = json.loads(data_json['vinfo'])

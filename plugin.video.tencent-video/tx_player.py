@@ -13,9 +13,11 @@
 @Desc    :
 
 """
+import json
 import re
 import time
 from functools import reduce
+from io import StringIO
 from random import *
 from string import hexdigits
 from urllib.parse import urlencode
@@ -27,15 +29,31 @@ from Crypto.Util.Padding import pad
 from pywasm_easy import WasmEasy, WasmEnv, WasmTable, WasmMemory
 
 
-class Document:
+class WebDocument:
     def __init__(self, url):
         self.URL = url
         self.referrer = ''
 
 
-class Window:
-    def __init__(self):
-        self.navigator = Navigator()
+class WebWindow:
+    def __init__(self, url, navigator=None):
+        self.navigator = navigator or Navigator()
+        res = requests.get(url=url, headers={'User-Agent': self.navigator.userAgent})
+        res.encoding = res.apparent_encoding
+        buffer = StringIO(res.text)
+        for line in buffer:
+            if 'canonical' in line:
+                g = re.search(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', line)
+                if g:
+                    self.base_url = url
+                    url = g[0]
+                break
+        for line in buffer:
+            if 'VIDEO_INFO' in line:
+                video_info_raw = '{' + line.split('{')[1]
+                self.video_info = json.loads(video_info_raw)
+                break
+        self.document = WebDocument(url)
 
 
 class Navigator:
@@ -104,17 +122,15 @@ class TxPlayer:
     appVer = '3.5.57'
 
     def __init__(self, url, navigator=None):
-        url_split = url.split('/')
+        self.window = WebWindow(url, navigator=navigator)
+        self.document = self.window.document
+
+        url_split = self.document.URL.split('/')
         self._host = url_split[2]
         self._cid = url_split[-2]
         self._vid = url_split[-1].split('.')[0]
         self._guid = self.create_guid()
         self._player_id = self.create_guid()
-
-        self.document = Document(url)
-        self.window = Window()
-        if navigator:
-            self.window.navigator = navigator
 
     @property
     def tm(self):
