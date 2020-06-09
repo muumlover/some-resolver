@@ -13,24 +13,20 @@
 @Desc    :
 
 """
+import json
 
-from tx_player import TxPlayer, Navigator
+from tx_player import TxPlayer
 
 if __name__ == '__main__':
-    navigator = Navigator
-    navigator.userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:77.0) Gecko/20100101 Firefox/77.0'
-    navigator.appCodeName = 'Mozilla'
-    navigator.appName = 'Netscape'
-    navigator.platform = 'Win32'
-
-    # tx_player = TxPlayer('https://v.qq.com/x/cover/bzfkv5se8qaqel2/n0020yrnly7.html', navigator=navigator)
-    tx_player = TxPlayer('https://v.qq.com/x/cover/mzc00200ps708z1/q003305dzmd.html', navigator=navigator)
-    print(tx_player._c_key_8_1)
-    # print(tx_player._c_key_9_1)
-    # key = tx_player.wasm.wa__getkey(
-    #     tx_player.platform, tx_player.appVer, tx_player.vid, '', '1fcb9528b79f2065c9a281a7d554edd1', 1556590422)
-    # print(key)
-    # key2 = '88dkKwGYKDF79ZEItZs_lpJX5WB4a2CdS8k5hHANVaqtHEZQ1c_W6myJ8hQDnmDDHYlsFcmCbTs52vPBr-xE-uhvZyEMY131vUh1H4pgCXe2OpAF-Wzte7F4kwln76xq_nwqEERWEZPLluNDEH6IC8EOljLQ2VfW2sTdospNPlD9535CNT9iSo3cLRH93ogtX_ObeZBTEOuKEsbtjkFpGl3F3IxmISJc_8dRIBruTik-e4rt0isxZAXexKqWDJGxu2rhTvrXyHJH87s1dUoA6Stf9X0c1RYGSdj_UQOME-ds0E7OepYmW0kNjO5DljtDJlQGBgYGBgZEwDLM'
-    # print(key == key2)
-    ret_data = tx_player.get_info()
-    b = 0
+    tx_player = TxPlayer('https://v.qq.com/x/cover/zu9dcrznlprx505/d0973687czo.html')
+    ret_data = tx_player.get_video_info()
+    data_json = ret_data.json()
+    vinfo = json.loads(data_json['vinfo'])
+    m3u8_list = vinfo['vl']['vi'][0]['ul']['ui']
+    video_urls = []
+    for m3u8_item in m3u8_list:
+        video_urls.append(m3u8_item['url'].replace('.ts.m3u8', '.1.ts'))
+        print(m3u8_item['url'])
+    for video_url in video_urls:
+        print(video_url)
+    pass

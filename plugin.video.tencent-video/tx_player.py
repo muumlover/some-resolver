@@ -18,7 +18,7 @@ import time
 from functools import reduce
 from random import *
 from string import hexdigits
-from urllib.parse import urlencode, parse_qs
+from urllib.parse import urlencode
 
 import requests
 from Crypto.Cipher import AES
@@ -115,8 +115,6 @@ class TxPlayer:
         self.window = Window()
         if navigator:
             self.window.navigator = navigator
-
-        self.wasm = Wasm(self)
 
     @property
     def tm(self):
@@ -310,7 +308,7 @@ class TxPlayer:
 
     @property
     def _c_key_9_1(self):
-        return self.wasm.wa__getkey(self.platform, self.appVer, self.vid, '', self.guid, self.tm)
+        return Wasm(self).wa__getkey(self.platform, self.appVer, self.vid, '', self.guid, self.tm)
 
     @property
     def _v_info_param_raw(self):
@@ -385,46 +383,14 @@ class TxPlayer:
             'tpid': '9'
         }
 
-    def get_info(self):
-
-        data1 = {
-            'buid': 'vinfoad',
-            'adparam': self.ad_param,
-            'vinfoparam': self.v_info_param
-        }
-        data2 = {
-            "buid": "vinfoad",
-            "adparam": "pf=in&ad_type=LD%7CKB%7CPVL&pf_ex=pc&url=https%3A%2F%2Fv.qq.com%2Fx%2Fcover%2Fmzc00200ps708z1%2Fq003305dzmd.html&refer=https%3A%2F%2Fv.qq.com%2Fx%2Fcover%2Fmzc00200ps708z1%2Fq003305dzmd.html&ty=web&plugin=1.0.0&v=3.5.57&coverid=mzc00200ps708z1&vid=q003305dzmd&pt=&flowid=1c048b037253d0af68318883eb20a8d1_10201&vptag=&pu=0&chid=0&adaptor=2&dtype=1&live=0&resp_type=json&guid=ecef7a974423ebdd638f94c9d5ef846f&req_type=1&from=0&appversion=1.0.145&platform=10201&tpid=9",
-            "vinfoparam": "charge=0&defaultfmt=auto&otype=ojson&guid=ecef7a974423ebdd638f94c9d5ef846f&flowid=1c048b037253d0af68318883eb20a8d1_10201&platform=10201&sdtfrom=v1010&defnpayver=1&appVer=3.5.57&host=v.qq.com&ehost=https%3A%2F%2Fv.qq.com%2Fx%2Fcover%2Fmzc00200ps708z1%2Fq003305dzmd.html&refer=v.qq.com&sphttps=1&tm=1591684692&spwm=4&logintoken=%7B%22main_login%22%3A%22%22%2C%22openid%22%3A%22%22%2C%22appid%22%3A%22%22%2C%22access_token%22%3A%22%22%2C%22vuserid%22%3A%22%22%2C%22vusession%22%3A%22%22%7D&vid=q003305dzmd&defn=&fhdswitch=0&show1080p=1&isHLS=1&dtype=3&sphls=2&spgzip=1&dlver=2&drm=32&hdcp=0&spau=1&spaudio=15&defsrc=1&encryptVer=9.1&cKey=gPOfDnKs0xR79ZEItZs_lpJX5WB4a2CdS8k7nPEPVaqtHEZQ1c_W6myJ8hQcnmDCHsArH9_WPjs52vPBr-xE-uhvZyEMY131vUh1H4pgCXe2Op8F_DerfPIt2wsxrvF8_Xw1EERXEtqMluNDEH6IC8EOljLQ2VfW2sTdospNPlD9535CNT9iSo3cLRH93ogtX_ObeZBTEOuKEsbtjkFpGl3F3IxmISJc_8dRIBruTik-e4rt0isxZAXexKqWDJGxu2q1S-zTxiZM-O02fh9Xu3kOoHdFgRcDS9b_UVPeTqc_h4UjOGuwnte5LCRPWcRSxKIGBgYGBgYlsvI7&fp2p=1&spadseg=3"
-        }
-        qsa1 = {k: v[0] for k, v in parse_qs(data1['adparam']).items()}
-        qsa2 = {k: v[0] for k, v in parse_qs(data2['adparam']).items()}
-        qsv1 = {k: v[0] for k, v in parse_qs(data1['vinfoparam']).items()}
-        qsv2 = {k: v[0] for k, v in parse_qs(data2['vinfoparam']).items()}
-        differa = set(qsa1.items()) ^ set(qsa2.items())
-        differv = set(qsv1.items()) ^ set(qsv2.items())
+    def get_video_info(self):
         res = requests.post(
             url=self.proxy_url,
-            json=data2,
-            headers={
-                'Host': 'vd.l.qq.com',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:77.0) Gecko/20100101 Firefox/77.0',
-                'Accept': 'application/json, text/javascript, */*; q=0.01',
-                'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Content-Type': 'text/plain',
-                'Content-Length': '1500',
-                'Origin': 'https://v.qq.com',
-                'Connection': 'keep-alive',
-                'Referer': 'https://v.qq.com/x/cover/mzc00200ps708z1/q003305dzmd.html',
-                'Cache-Control': 'max-age=0, no-cache',
-                'Pragma': 'no-cache',
-                'TE': 'Trailers',
+            json={
+                'buid': 'vinfoad',
+                'adparam': self.ad_param,
+                'vinfoparam': self.v_info_param
             },
-        )
-        res = requests.post(
-            url=self.proxy_url,
-            json=data1,
             headers={
                 'User-Agent': self.window.navigator.userAgent,
                 'Content-Type': 'text/plain',
