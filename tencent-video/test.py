@@ -22,7 +22,7 @@
 @Author  : Sam Wang
 @Email   : muumlover@live.com
 @Blog    : https://blog.ronpy.com
-@Project : plugin.video.tencent-video
+@Project : tencent-video
 @FileName: default.py
 @Software: PyCharm
 @license : (C) Copyright 2020 by Sam Wang. All rights reserved.
