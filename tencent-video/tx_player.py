@@ -26,7 +26,7 @@ import requests
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 
-from pywasm_easy import WasmEasy, WasmEnv, WasmTable, WasmMemory
+from easywasm import WasmEasy, WasmEnv, WasmTable, WasmMemory
 
 
 class WebDocument:

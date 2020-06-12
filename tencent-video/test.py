@@ -30,7 +30,7 @@
 
 """
 
-from pywasm_easy import pywasm_path
+from easywasm import pywasm_path
 from tx_player import TxPlayer
 
 pywasm_path()
