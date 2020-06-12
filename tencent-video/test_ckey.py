@@ -7,7 +7,7 @@
 @Email   : muumlover@live.com
 @Blog    : https://blog.ronpy.com
 @Project : xbmc-addons
-@FileName: test.py
+@FileName: test_ckey.py
 @Software: PyCharm 
 @license : (C) Copyright 2020 by Sam Wang. All rights reserved.
 @Desc    : 
