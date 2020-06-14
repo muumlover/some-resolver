@@ -101,8 +101,8 @@ class WasmEasy:
         self.runtime = pywasm.load(name, {
             'env': env,
             'global': {
-                'NaN': None,
-                'Infinity': None,
+                'NaN': 0,
+                'Infinity': 0,
             }
         })
         # pywasm.on_debug()
