@@ -20,14 +20,30 @@ import wadze
 wadze.Global.get_value = lambda self: VValue(self.globaltype.type, self.expr[0][1])
 wadze.ImportGlobal.get_value = lambda self, value: VValue(self.globaltype.type, value)
 
+MEMORY_PAGE_SIZE = 64 * 1024
+MEMORY_PAGE_MAX = 2 ** 16
+
 
 class VEnv:
     pass
 
 
 class VMemory:
+    data = None
+
     def __init__(self, min, max):
-        pass
+        self.limit_min = min
+        self.limit_max = max
+        self.data = bytearray()
+        self.size = 0
+
+    def grow(self, n):
+        if self.limit_max and self.size + n > self.limit_max:
+            raise RuntimeError('out of memory')
+        if self.size + n > MEMORY_PAGE_MAX:
+            raise RuntimeError('out of memory')
+        self.data.extend([0x00] * n * MEMORY_PAGE_SIZE)
+        self.size += n
 
 
 VFunction = namedtuple('VFunction', ['code', 'type', 'name'])
@@ -62,6 +78,9 @@ class VMemoryStack:
     def __init__(self):
         self._data = deque()
 
+    def __len__(self):
+        return len(self._data)
+
     def push(self, value):
         self._data.append(VValue(value.type, value.data))
 
@@ -70,18 +89,13 @@ class VMemoryStack:
         return VValue(value.type, value.data)
 
 
-class VRuntime:
-    _data = None
-    _wasm = None
-    function_list = None
+class VCore:
+    dispatch_map = None
     global_list = None
+    local_list = None
     memory_stack = None
-    frame_stack = None
 
-    def __init__(self, imp):
-        self.imp = imp
-        self.memory_stack = VMemoryStack()
-        self.frame_stack = VStack()
+    def __init__(self):
         self.dispatch_map = {
             'unreachable': self._unreachable_,
             'nop': self._nop_,
@@ -256,77 +270,11 @@ class VRuntime:
             'f64.reinterpret_i64': self._f64_reinterpret_i64_,
         }
 
-    @property
-    def local_list(self):
-        return self.frame_stack[-1] if self.frame_stack else None
-
-    def load(self, wasm):
-        self._wasm = wasm
-        self.function_list = []
-        self.global_list = []
-        type_list = self._wasm['type']
-        import_list = self._wasm['import']
-        func_type_list = self._wasm['func']
-        global_list = self._wasm['global']
-        element_list = self._wasm['element']
-        code_list = self._wasm['code']
-        data_list = self._wasm['data']
-
-        for i in import_list:
-            if isinstance(i, wadze.ImportFunction):
-                self.function_list.append(VFunction(
-                    self.imp[i.module].get(i.name, None),
-                    type_list[i.typeidx],
-                    i.name
-                ))
-            if isinstance(i, wadze.ImportGlobal):
-                self.global_list.append(VValue(i.globaltype.type, self.imp[i.module][i.name]))
-        for index, c in enumerate(code_list):
-            self.function_list.append(VFunction(
-                c,
-                type_list[func_type_list[index]],
-                None
-            ))
-        for index, e in enumerate(self._wasm['export']):
-            func = self.function_list[e.ref]
-            self.function_list[e.ref] = VFunction(
-                func.code,
-                func.type,
-                e.name
-            )
-            pass
-        for g in global_list:
-            self._exec_opcodes(g.expr[0])
-            self.global_list.append(self.memory_stack.pop())
-
     def _exec_opcodes(self, opcodes):
-        operation = self.dispatch(opcodes[0])
-        operation(opcodes[1:])
+        pass
 
-    def _run_wasm_fun(self, func):
-        self.frame_stack.push([])
-        for param in func.type.params:
-            self.local_list.append(VValue(param, 0))
-        for local in func.code.locals:
-            self.local_list.append(VValue(local, 0))
-        for i, opcodes in enumerate(func.code.instructions):
-            self._exec_opcodes(opcodes)
-        self.frame_stack.pop()
-
-    def _run(self, func):
-        if isinstance(func.code, wadze.Code):
-            self._run_wasm_fun(func)
-        else:
-            pass
-
-    def call(self, func_index):
-        f_func = self.function_list[func_index]
-        self._run(f_func)
-
-    def call_export(self, export_index):
-        e_type = self._wasm['type'][export_index]
-        e_export = self._wasm['export'][export_index]
-        self.call(e_export.ref)
+    def call(self, param):
+        pass
 
     def dispatch(self, op):
         if op in self.dispatch_map:
@@ -347,6 +295,10 @@ class VRuntime:
         pass
 
     def _if_(self, operand):
+        x = self.memory_stack.pop()
+        if x.data:
+            for opcodes in operand[1][0]:
+                self._exec_opcodes(opcodes)
         pass
 
     def _else_(self, operand):
@@ -365,6 +317,7 @@ class VRuntime:
         pass
 
     def _call_(self, operand):
+        self.call(operand[0])
         pass
 
     def _call_indirect_(self, operand):
@@ -861,33 +814,205 @@ class VRuntime:
         pass
 
 
-class VWasm:
+class VRuntime(VCore):
+    _data = None
     module = None
-    _export_index = None
+    memory_list = None
+    function_list = None
+    frame_stack = None
 
-    def __init__(self, path, imp):
-        self.vm = VRuntime(imp)
-        self._load_module(path)
-        self.vm.load(self.module)
+    def __init__(self, imp):
+        super().__init__()
+        self.imp = imp
+        self.memory_stack = VMemoryStack()
+        self.frame_stack = VStack()
 
-    def _load_module(self, path):
+    @property
+    def local_list(self):
+        return self.frame_stack[-1] if self.frame_stack else None
+
+    def load(self, module):
+        self.module = module
+        self.function_list = []
+        self.global_list = []
+
+        for i in self.module.import_list:
+            if isinstance(i, wadze.ImportFunction):
+                self.function_list.append(VFunction(
+                    self.imp[i.module].get(i.name, None),
+                    self.module.type_list[i.typeidx],
+                    i.name
+                ))
+            if isinstance(i, wadze.ImportGlobal):
+                self.global_list.append(VValue(i.globaltype.type, self.imp[i.module][i.name]))
+        for index, c in enumerate(self.module.code_list):
+            self.function_list.append(VFunction(
+                c,
+                self.module.type_list[self.module.func_list[index]],
+                None
+            ))
+        for index, e in enumerate(self.module.export_list):
+            func = self.function_list[e.ref]
+            self.function_list[e.ref] = VFunction(
+                func.code,
+                func.type,
+                e.name
+            )
+            pass
+        for g in self.module.global_list:
+            self._exec_opcodes(g.expr[0])
+            self.global_list.append(self.memory_stack.pop())
+
+    def _exec_opcodes(self, opcodes):
+        operation = self.dispatch(opcodes[0])
+        operation(opcodes[1:])
+
+    def _run_wasm_fun(self, func):
+        self.frame_stack.push([])
+        assert len(self.memory_stack) >= len(func.type.params)
+        for i, param in enumerate(func.type.params):
+            v = self.memory_stack.pop()
+            assert v.type == param
+            self.local_list.append(v)
+        for local in func.code.locals:
+            self.local_list.append(VValue(local, 0))
+        for i, opcodes in enumerate(func.code.instructions):
+            self._exec_opcodes(opcodes)
+        self.frame_stack.pop()
+
+    def _run(self, func):
+        if isinstance(func.code, wadze.Code):
+            self._run_wasm_fun(func)
+        elif func.code:
+            func.code()
+            pass
+
+    def call(self, func_index):
+        f_func = self.function_list[func_index]
+        self._run(f_func)
+
+    def call_export(self, export_index, args):
+        e_export = self._wasm['export'][export_index]
+        func = self.function_list[e_export.ref]
+        if not len(func.type.params) == len(args): raise ValueError()
+        for i, p_type in enumerate(func.type.params):
+            v = args[i]
+            if not v.type == p_type: raise TypeError()
+            self.memory_stack.push(v)
+        self._run(func)
+        if not len(self.memory_stack) >= len(func.type.returns): raise RuntimeError()
+        r_list = []
+        for i, r_type in enumerate(func.type.returns):
+            v = self.memory_stack.pop()
+            if not v.type == r_type: raise RuntimeError()
+            r_list.append(v)
+        return tuple(r_list)
+
+    def get_type(self, export_index):
+        e_export = self._wasm['export'][export_index]
+        func = self.function_list[e_export.ref]
+        return func.type
+
+    def memcpy(self, data, addr, size):
+        self.memory_list[0].data[addr:addr + size] = bytes(data.encode() + b'\0')
+
+
+class VModule:
+    __slots__ = (
+        '_module',
+        '_export_index',
+        'type_list',
+        'import_list',
+        'func_list',
+        'table_list',
+        'memory_list',
+        'global_list',
+        'export_list',
+        'start_list',
+        'element_list',
+        'code_list',
+        'data_list',
+    )
+
+    def __init__(self, path):
         with open(path, 'rb') as file:
             data = file.read()
-        self.module = module = wadze.parse_module(data)
-        module['code'] = [wadze.parse_code(c) for c in module['code']]
-        self._export_index = [e.name for e in module['export']]
-        return module
+        self._module = wadze.parse_module(data)
+        self._module['code'] = [wadze.parse_code(c) for c in self._module['code']]
+        self._export_index = [e.name for e in self._module['export']]
 
     def __getattr__(self, item):
+        if '_list' in item:
+            key = item.replace('_list', '')
+            return self._module[key]
+
+
+class VWasm:
+    _export_index = None
+
+    def __init__(self, path, imp, alloc_name):
+        self.vm = VRuntime(imp)
+        self.module = VModule(path)
+        self.vm.load(self.module)
+
+        self.alloc = self[alloc_name](params=[int], returns=[int])
+
+    def v_memcpy(self, data, addr, size):
+        self.vm.memory_list[0].data[addr:addr + size] = bytes(data.encode() + b'\0')
+
+    def v_deposit(self, data):
+        ptr = self.alloc(len(data) + 1)
+        self.v_memcpy(data, ptr, len(data) + 1)
+        return ptr
+
+    def v_withdraw(self, ptr):
+        ptr_end = ptr
+        while self.vm.memory_list[0].data[ptr_end] != 0:
+            ptr_end += 1
+        return self.vm.memory_list[0].data[ptr:ptr_end].decode()
+
+    def v_call(self, index, params, returns):
+        fun_index = self._export_index.index(index)
+
+        def func(*args):
+            assert len(params) == len(args)
+            fun_type = self.vm.get_type(fun_index)
+            new_args = []
+            for i, arg in enumerate(args):
+                if params[i] == str:
+                    arg_ptr = self.v_deposit(arg)
+                    new_args.append(VValue(fun_type.params[i], arg_ptr))
+                else:
+                    new_args.append(VValue(fun_type.params[i], arg))
+            ret_data = self.vm.call_export(fun_index, new_args)
+            ret = []
+            for i, d in enumerate(ret_data):
+                if returns[0] == str:
+                    ret.append(self.v_withdraw(d.data))
+                else:
+                    ret.append(d.data)
+            return tuple(ret)
+
+        return func
+
+    def __getattr__(self, item):
+        return self[item]
+
+    def __getitem__(self, item):
         if item in self._export_index:
-            return lambda: self.vm.call_export(self._export_index.index(item))
+            return lambda params, returns: self.v_call(item, params, returns)
         else:
-            raise Exception('func not found')
+            raise Exception('func <%s> not found' % item)
 
 
 if __name__ == '__main__':
     def _get_unicode_str():
-        pass
+        data = '|'
+        data_len = len(data) + 1
+        # data_ptr self.wa__malloc(data_len)
+        data_ptr = a.stackAlloc(VValue('i32', data_len))
+        a.memcpy(data, data_ptr, data_len + 1)
+        return data_ptr
 
 
     a = VWasm('ckey.wasm', {'env': {
@@ -905,6 +1030,8 @@ if __name__ == '__main__':
     }, 'global': {
         'NaN': 0,
         'Infinity': 0,
-    }})
-    a._getckey()
+    }}, alloc_name='stackAlloc')
+
+    data_ptr = a.alloc(10)
+    r = a._getckey(params=[str, int, int, int, int, str], returns=[str])('asd', 0, 0, 0, 0, '123')
     pass
